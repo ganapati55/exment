@@ -511,6 +511,7 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
             'asApi' => false, // calling as api
             'appendErrorAllColumn' => false, // if error, append error message for all column
             'validateLock' => true, // whether validate update lock
+            'calledType' => null, // Whether this validation is called.
         ], $options);
         $systemColumn = $options['systemColumn'];
         $column_name_prefix = $options['column_name_prefix'];
@@ -547,7 +548,7 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
         );
         
         $errors = array_merge(
-            $this->validatorPlugin($value, $custom_value),
+            $this->validatorPlugin($value, $custom_value, ['called_type' => $options['calledType']]),
             $errors
         );
 
@@ -914,12 +915,13 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
     /**
      * validator using plugin
      */
-    public function validatorPlugin($input, $custom_value = null)
+    public function validatorPlugin($input, $custom_value = null, array $options = [])
     {
         return Plugin::pluginValidator($this, [
             'custom_table' => $this,
             'custom_value' => $custom_value,
             'input_value' => array_get($input, 'value'),
+            'called_type' => array_get($options, 'called_type'),
         ]);
     }
 
@@ -1452,7 +1454,7 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
             //WorkflowItem::getStatusSubquery($query, $this);
             $query->with(['workflow_value', 'workflow_value.workflow_status']);
         }
-        $this->appendWorkflowSubQuery($query, $custom_view);
+        $this->appendSubQuery($query, $custom_view);
     }
 
     /**
@@ -1462,27 +1464,9 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
      * @param CustomView|null $custom_view
      * @return void
      */
-    public function appendWorkflowSubQuery($query, ?CustomView $custom_view)
+    public function appendSubQuery($query, ?CustomView $custom_view)
     {
-        if (
-            System::requestSession(Define::SYSTEM_KEY_SESSION_WORLFLOW_STATUS_CHECK) === true ||
-            (!is_nullorempty($custom_view) &&
-            $custom_view->custom_view_filters_cache->contains(function ($custom_view_filter) {
-                return $custom_view_filter->view_column_target_id == SystemColumn::WORKFLOW_STATUS()->option()['id'];
-            }))) {
-            // add query
-            WorkflowItem::getStatusSubquery($query, $this, $custom_view->filter_is_or);
-        }
-        // if contains custom_view_filters workflow query
-        if (
-            System::requestSession(Define::SYSTEM_KEY_SESSION_WORLFLOW_FILTER_CHECK) === true ||
-            ($custom_view &&
-            $custom_view->custom_view_filters_cache->contains(function ($custom_view_filter) {
-                return $custom_view_filter->view_column_target_id == SystemColumn::WORKFLOW_WORK_USERS()->option()['id'];
-            }))) {
-            // add query
-            WorkflowItem::getWorkUsersSubQuery($query, $this, $custom_view->filter_is_or);
-        }
+        $this->appendWorkflowSubQuery($query, $custom_view);
 
         // if has relations, set with
         if (!is_nullorempty($custom_view)) {
@@ -1508,9 +1492,53 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
 
 
     /**
-     * Set selectTable value's. for after calling from select_table object
+     * Append to query for filtering workflow
+     *
+     * @param \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query
+     * @param CustomView|null $custom_view
+     * @return void
      */
-    public function setSelectTableValues(?\Illuminate\Database\Eloquent\Collection $customValueCollection)
+    public function appendWorkflowSubQuery($query, ?CustomView $custom_view)
+    {
+        if (
+            System::requestSession(Define::SYSTEM_KEY_SESSION_WORLFLOW_STATUS_CHECK) === true ||
+            (!is_nullorempty($custom_view) &&
+            $custom_view->custom_view_filters_cache->contains(function ($custom_view_filter) {
+                return $custom_view_filter->view_column_target_id == SystemColumn::WORKFLOW_STATUS()->option()['id'];
+            }))) {
+            // add query
+            WorkflowItem::getStatusSubquery($query, $this, $custom_view->filter_is_or ?? false);
+        }
+        // if contains custom_view_filters workflow query
+        if (
+            System::requestSession(Define::SYSTEM_KEY_SESSION_WORLFLOW_FILTER_CHECK) === true ||
+            ($custom_view &&
+            $custom_view->custom_view_filters_cache->contains(function ($custom_view_filter) {
+                return $custom_view_filter->view_column_target_id == SystemColumn::WORKFLOW_WORK_USERS()->option()['id'];
+            }))) {
+            // add query
+            WorkflowItem::getWorkUsersSubQuery($query, $this, $custom_view->filter_is_or ?? false);
+        }
+    }
+
+
+    /**
+     * Set selectTable value's and relations. for after calling from select_table object
+     */
+    public function setSelectRelationValues(?\Illuminate\Database\Eloquent\Collection $customValueCollection)
+    {
+        $this->setSelectTableValues($customValueCollection);
+        $this->setRelationValues($customValueCollection);
+    }
+
+    
+    /**
+     * Set selectTable value's. for after calling from select_table object
+     *
+     * @param \Illuminate\Support\Collection|null $customValueCollection
+     * @return void
+     */
+    public function setSelectTableValues(?\Illuminate\Support\Collection $customValueCollection)
     {
         if (empty($customValueCollection)) {
             return;
@@ -1531,7 +1559,17 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
             // value sometimes array, so flatten value. maybe has best way..
             $target_table->setCustomValueModels($values);
         });
+    }
 
+
+    /**
+     * Set relation value's. for after calling from select_table object
+     */
+    public function setRelationValues(?\Illuminate\Database\Eloquent\Collection $customValueCollection)
+    {
+        if (empty($customValueCollection)) {
+            return;
+        }
 
         //// for parent relation
         $relation = CustomRelation::getRelationByChild($this, RelationType::ONE_TO_MANY);
@@ -1550,7 +1588,12 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
     }
 
 
-
+    /**
+     * query and set custom value's model
+     *
+     * @param array|Collection $ids
+     * @return void
+     */
     public function setCustomValueModels($ids)
     {
         // value sometimes array, so flatten value. maybe has best way..
@@ -1568,9 +1611,11 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
             return;
         }
 
-        $this->getValueModel()->query()->findMany(array_unique($finds))->each(function ($target_value) {
-            // set request settion
-            $target_value->setValueModel();
+        $this->getValueModel()->query()->whereIn('id', array_unique($finds))->chunk(1000, function ($target_values) {
+            $target_values->each(function ($target_value) {
+                // set request settion
+                $target_value->setValueModel();
+            });
         });
     }
 
@@ -1613,6 +1658,10 @@ class CustomTable extends ModelBase implements Interfaces\TemplateImporterInterf
             $records->each(function ($record) use ($keyName, &$result) {
                 $matchedKey = array_get($record, $keyName);
                 $result[$matchedKey] = $record;
+                
+                if ($record instanceof CustomValue) {
+                    $record->setValueModel();
+                }
             });
         }
 
