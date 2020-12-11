@@ -7,14 +7,42 @@ use Carbon\Carbon;
 /**
  *
  * @property mixed $query
+ * @property mixed $model
  */
 trait ExtendedBuilderTrait
 {
     /**
+     * Checking whether appended query.
+     *
+     * @var array
+     */
+    protected $appendedQuery = [];
+
+    /**
+     * Whether appended query or sub query. If not appended, return false, and set query
+     *
+     * @param string $keyName
+     * @return $this
+     */
+    public function appendQueryOnce(string $keyName, \Closure $queryCallback)
+    {
+        // if already set, return true.
+        if (in_array($keyName, $this->appendedQuery)) {
+            return $this;
+        }
+
+        // Execute \Closure.
+        $queryCallback($this);
+
+        $this->appendedQuery[] = $keyName;
+        return $this;
+    }
+
+
+    /**
      * Update a removing json key.
      *
-     * @param  string  $targetColumn
-     * @param  string  $removingJsonKey
+     * @param  string  $key
      * @return int
      */
     public function updateRemovingJsonKey(string $key)
@@ -436,9 +464,9 @@ trait ExtendedBuilderTrait
 
         if ($isDatetime) {
             $date = (in_array($mark, ['<', '<=']) ? $value->copy()->addDay(1) : $value);
-            return $this->where($column, $mark, $date);
+            return $this->where($column, $mark, $date->format('Y-m-d'));
         }
 
-        return $this->where($column, $mark, $value);
+        return $this->where($column, $mark, $value->format('Y-m-d'));
     }
 }

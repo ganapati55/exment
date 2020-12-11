@@ -54,7 +54,7 @@ use Cache;
 * @method static int|void backup_automatic_term($arg = null)
 * @method static int|void backup_automatic_hour($arg = null)
 * @method static array|void backup_target($arg = null)
-* @method static datetime|void backup_automatic_executed($arg = null)
+* @method static Carbon|void backup_automatic_executed($arg = null)
 * @method static int|void backup_history_files($arg = null)
 * @method static boolean|void login_use_2factor($arg = null)
 * @method static string|void login_2factor_provider($arg = null)
@@ -149,6 +149,20 @@ class System extends ModelBase
         } else {
             array_forget(static::$requestSession, $key);
         }
+    }
+
+    /**
+     * Get Request Settion key already setted.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    public static function getRequestSessionKeys() : \Illuminate\Support\Collection
+    {
+        $result = collect();
+        foreach (static::$requestSession as $key => $value) {
+            $result->push($key);
+        }
+        return $result;
     }
 
     /**

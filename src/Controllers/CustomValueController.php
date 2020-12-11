@@ -239,11 +239,15 @@ class CustomValueController extends AdminControllerTableBase
         return $content;
     }
 
+
     /**
-     * Edit interface.
+     * edit
      *
-     * @param $id
-     * @return Content
+     * @param Request $request
+     * @param Content $content
+     * @param string $tableKey
+     * @param string|int|null $id
+     * @return Response
      */
     public function edit(Request $request, Content $content, $tableKey, $id)
     {
@@ -435,7 +439,7 @@ class CustomValueController extends AdminControllerTableBase
             abort(404);
         }
         
-        setTimeLimitLong();
+        \Exment::setTimeLimitLong();
 
         $class = $plugin->getClass($request->input('plugin_type'), [
             'custom_table' => $this->custom_table,
@@ -481,7 +485,7 @@ class CustomValueController extends AdminControllerTableBase
             abort(404);
         }
         
-        setTimeLimitLong();
+        \Exment::setTimeLimitLong();
 
         $response = $operation->execute($this->custom_table, $id);
         
@@ -757,7 +761,7 @@ class CustomValueController extends AdminControllerTableBase
 
     /**
      * Make a form builder.
-     * @param $id if edit mode, set model id
+     * @param string|int|null $id if edit mode, set model id
      * @return Form
      */
     protected function form($id = null)
